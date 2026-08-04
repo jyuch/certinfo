@@ -13,18 +13,21 @@ struct Cli {
     site: String,
 
     /// Directory the report is written to. Created if it does not exist.
+    /// When omitted, the report is printed to stdout.
     #[clap(long, short)]
-    output: PathBuf,
+    output: Option<PathBuf>,
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    let code = match certinfo::run::run(&cli.site, &cli.output) {
-        Ok(path) => {
+    let code = match certinfo::run::run(&cli.site, cli.output.as_deref()) {
+        Ok(Some(path)) => {
             println!("{}", path.display());
             0
         }
+        // The report itself was already written to stdout; nothing to add.
+        Ok(None) => 0,
         Err(e) => {
             eprintln!("{e:#}");
             1

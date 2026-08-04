@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-certinfo is a command line tool written in Rust that inspects HTTPS server certificates. It performs a TLS handshake against a target site, captures the certificate chain the server presents, and writes a human readable report to `<output-dir>/yyyymmddhhmmss.txt`.
+certinfo is a command line tool written in Rust that inspects HTTPS server certificates. It performs a TLS handshake against a target site, captures the certificate chain the server presents, and writes a human readable report to `<output-dir>/yyyymmddhhmmss.txt`, or to stdout when `--output` is omitted.
 
 The defining design decision is that **trust chain validation is skipped on purpose**. The tool exists to diagnose broken certificates, so expired, self-signed and wrong-host chains must still produce a full report. Handshake signature verification is still performed, so the report always describes a chain the peer holds the private key for — only the path-to-a-trusted-root check is omitted.
 
@@ -25,6 +25,7 @@ cargo fmt --check
 
 # Run
 cargo run -- --site https://www.rust-lang.org --output ./reports
+cargo run -- --site https://www.rust-lang.org              # report to stdout
 ```
 
 The project uses Rust edition 2024. Windows MSVC builds use static CRT linking (configured in `.cargo/config.toml`), so the release binary depends only on OS DLLs.
@@ -34,11 +35,11 @@ The project uses Rust edition 2024. Windows MSVC builds use static CRT linking (
 ### Data Flow
 
 1. `Target::parse()` turns the `--site` argument into a host and port
-2. `fs::create_dir_all()` ensures the output directory exists
+2. `fs::create_dir_all()` ensures the output directory exists, when `--output` was given
 3. `tls::fetch_chain()` resolves the host, connects, completes the TLS handshake with an accept-anything certificate verifier, and copies out the peer certificates plus the negotiated protocol and cipher suite
 4. `report::render()` parses each DER certificate and formats the whole report as a `String`
-5. `report::report_file_name()` derives the file name from the current local time
-6. The report is written with `create_new`, so a same-second second run fails instead of overwriting
+5. With `--output`, `report::report_file_name()` derives the file name from the current local time and the report is written with `create_new`, so a same-second second run fails instead of overwriting
+6. Without `--output`, the rendered report is written straight to a locked, explicitly flushed stdout
 
 ### Core Components
 
@@ -60,9 +61,9 @@ The project uses Rust edition 2024. Windows MSVC builds use static CRT linking (
 - `validity_status()` and `days()` take the current time as an `i64` parameter rather than reading the clock, which is what makes them testable
 - Fixed 19-character label column keeps the output greppable and diffable
 
-**`src/run.rs`** — Wires the above together and writes the file. Returns the written path.
+**`src/run.rs`** — Wires the above together and emits the report. Returns `Some(path)` when it wrote a file, `None` when it printed to stdout.
 
-**`src/main.rs`** — CLI (clap derive), maps `anyhow::Result` to an exit code via `eprintln!("{e:#}")` + `process::exit(1)`.
+**`src/main.rs`** — CLI (clap derive), maps `anyhow::Result` to an exit code via `eprintln!("{e:#}")` + `process::exit(1)`. `Ok(None)` prints nothing, so in stdout mode the report is the entire stdout payload.
 
 ### Key Dependencies
 
@@ -86,5 +87,6 @@ Test certificates are generated at test time with `rcgen` (a dev-dependency) rat
 - `X509Certificate<'a>` borrows the DER buffer it was parsed from. Parse inside the render loop; never store a parsed certificate in a struct alongside its bytes.
 - `x509_parser::prelude::*` brings a `time` module into scope that shadows the `time` crate. In test code use `::time::` with a leading `::`.
 - Network-dependent code (`src/tls.rs`) has no unit tests on purpose — mocking a handshake would test the mock. Verify it by running against `badssl.com` subdomains: `expired`, `self-signed`, `wrong.host`, `ecc256`. Those hosts are occasionally slow and can time out; retry before assuming a regression.
-- The report file name uses local time with one second of resolution. `create_new` turns a same-second collision into an error rather than a silent overwrite; do not "fix" this by adding a counter or random suffix, which would violate the `yyyymmddhhmmss.txt` format.
+- When `--output` is given, the report file name uses local time with one second of resolution. `create_new` turns a same-second collision into an error rather than a silent overwrite; do not "fix" this by adding a counter or random suffix, which would violate the `yyyymmddhhmmss.txt` format.
+- The stdout path uses `write_all` rather than `print!`, so a broken pipe (`certinfo -s host | head`) surfaces as an `anyhow` error and exit 1 instead of a panic. The explicit `flush()` is deliberate too: `main` ends in `process::exit`, which skips the flush std would do when `main` returns.
 - The release profile enables aggressive optimization: LTO, single codegen unit, binary stripping

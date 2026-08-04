@@ -6,7 +6,8 @@ HTTPS server certificate reporter
 ## Overview
 
 `certinfo` connects to an HTTPS site, takes the certificate chain the server presents during the TLS
-handshake, and writes a human readable report to a text file named `yyyymmddhhmmss.txt`.
+handshake, and writes a human readable report to a text file named `yyyymmddhhmmss.txt`, or prints it
+to stdout when no output directory is given.
 
 The trust chain is deliberately **not** validated. Expired, self-signed and wrong-host certificates
 are reported just like valid ones, which is what makes the tool useful for diagnosing a broken site.
@@ -21,10 +22,10 @@ resulting `certinfo.exe` is self contained.
 
 ## Usage
 
-| Argument          | Description                                             |
-|:------------------|:--------------------------------------------------------|
-| `--site <SITE>`   | Target site. `-s` for short.                             |
-| `--output <DIR>`  | Directory the report is written to. `-o` for short.      |
+| Argument          | Description                                                                                            |
+|:------------------|:-------------------------------------------------------------------------------------------------------|
+| `--site <SITE>`   | Target site. `-s` for short.                                                                             |
+| `--output <DIR>`  | Directory the report is written to. `-o` for short. Optional; the report goes to stdout when it is omitted. |
 
 The site argument accepts three forms. The port defaults to 443 when it is omitted.
 
@@ -35,7 +36,8 @@ The site argument accepts three forms. The port defaults to 443 when it is omitt
 | `https://example.com/path`    | `example.com:443`     |
 
 IPv6 literals must be bracketed, for example `[2606:4700::1111]:8443`. Schemes other than `https` are
-rejected. The output directory is created if it does not exist.
+rejected. The output directory is created if it does not exist. When `--output` is omitted the report
+is written to stdout instead and no file is created.
 
 ``` powershell
 .\certinfo.exe --site https://www.rust-lang.org --output .\reports
@@ -45,8 +47,13 @@ rejected. The output directory is created if it does not exist.
 .\certinfo.exe -s expired.badssl.com -o .\reports
 ```
 
-On success the path of the report is printed to stdout and the exit code is 0. On failure the reason
-is printed to stderr and the exit code is 1.
+``` powershell
+.\certinfo.exe -s www.rust-lang.org
+```
+
+With `--output`, the path of the report is printed to stdout on success and the exit code is 0.
+Without it, the report itself is printed to stdout and nothing else is. On failure the reason is
+printed to stderr and the exit code is 1.
 
 ## Output
 
@@ -94,6 +101,6 @@ actually signed this one.
 
 ## Notes
 
-The report file name has one second of resolution and uses local time. Two runs within the same
-second would collide, so the second run fails with an "already exists" error rather than silently
-overwriting the earlier report.
+When `--output` is given, the report file name has one second of resolution and uses local time. Two
+runs within the same second would collide, so the second run fails with an "already exists" error
+rather than silently overwriting the earlier report.
