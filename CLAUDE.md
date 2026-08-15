@@ -11,9 +11,14 @@ The defining design decision is that **trust chain validation is skipped on purp
 ## Build and Development Commands
 
 ```bash
-# Build
+# Build (debug)
 cargo build
-cargo build --release    # LTO + single codegen unit + strip
+
+# Build (release) — rebuilds std from source, so it needs nightly
+cargo +nightly build --release --config .cargo/release.toml
+
+# Same build when nightly is not installed
+RUSTC_BOOTSTRAP=1 cargo build --release --config .cargo/release.toml
 
 # Test
 cargo test
@@ -28,7 +33,16 @@ cargo run -- --site https://www.rust-lang.org --output ./reports
 cargo run -- --site https://www.rust-lang.org              # report to stdout
 ```
 
+In PowerShell, set the env var separately: `$env:RUSTC_BOOTSTRAP = "1"; cargo build --release --config .cargo/release.toml`.
+
 The project uses Rust edition 2024. Windows MSVC builds use static CRT linking (configured in `.cargo/config.toml`), so the release binary depends only on OS DLLs.
+
+Release builds must go through `.cargo/release.toml`; a plain `cargo build --release` produces a working binary but not the shipping one. That file layers on top of `.cargo/config.toml` (it is a `--config` overlay, not a replacement) and adds:
+- `[unstable] build-std = ["std", "panic_abort"]` — std is compiled from source together with the crate, so LTO and `opt-level = "s"` apply to it as well
+- `[unstable] panic-immediate-abort` plus `[profile.release] panic = "immediate-abort"` — drops the panic formatting and unwinding machinery from the rebuilt std
+- `/NODEFAULTLIB` link args for `vcruntime.lib`, `msvcrt.lib` and `libucrt.lib` with `/DEFAULTLIB:ucrt.lib`, so the statically linked CRT resolves against the OS-provided UCRT
+
+Both keys under `[unstable]` require a nightly compiler. `RUSTC_BOOTSTRAP=1` unlocks the same keys on stable and is the documented fallback here — it is the identical build, not a degraded one. Building std also needs the `rust-src` component (`rustup component add rust-src`) for whichever toolchain runs the build.
 
 ## Architecture
 
@@ -67,7 +81,7 @@ The project uses Rust edition 2024. Windows MSVC builds use static CRT linking (
 
 ### Key Dependencies
 
-- `rustls`: TLS client. Pinned to `default-features = false` + the `ring` provider rather than the default `aws-lc-rs`, because `aws-lc-sys` needs cmake and NASM at build time, which would break the "`cargo build --release` produces a self-contained exe with no external tooling" property. `x509-parser`'s `verify` feature also pulls `ring`, so there is exactly one crypto backend in the tree.
+- `rustls`: TLS client. Pinned to `default-features = false` + the `ring` provider rather than the default `aws-lc-rs`, because `aws-lc-sys` needs cmake and NASM at build time, which would break the "the release build produces a self-contained exe with no external tooling beyond the Rust toolchain" property. `x509-parser`'s `verify` feature also pulls `ring`, so there is exactly one crypto backend in the tree.
 - `x509-parser` (with `verify`): DER parsing and signature verification
 - `sha2`: SHA-256 fingerprints
 - `chrono`: local-time file names and the report timestamp
@@ -89,4 +103,4 @@ Test certificates are generated at test time with `rcgen` (a dev-dependency) rat
 - Network-dependent code (`src/tls.rs`) has no unit tests on purpose — mocking a handshake would test the mock. Verify it by running against `badssl.com` subdomains: `expired`, `self-signed`, `wrong.host`, `ecc256`. Those hosts are occasionally slow and can time out; retry before assuming a regression.
 - When `--output` is given, the report file name uses local time with one second of resolution. `create_new` turns a same-second collision into an error rather than a silent overwrite; do not "fix" this by adding a counter or random suffix, which would violate the `yyyymmddhhmmss.txt` format.
 - The stdout path uses `write_all` rather than `print!`, so a broken pipe (`certinfo -s host | head`) surfaces as an `anyhow` error and exit 1 instead of a panic. The explicit `flush()` is deliberate too: `main` ends in `process::exit`, which skips the flush std would do when `main` returns.
-- The release profile enables aggressive optimization: LTO, single codegen unit, binary stripping
+- The release profile enables aggressive size optimization: LTO, single codegen unit, `opt-level = "s"`, `panic = "abort"` and symbol stripping. `.cargo/release.toml` takes it further with a from-source std and `panic = "immediate-abort"` — see the build section above.
