@@ -29,8 +29,8 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 
 # Run
-cargo run -- --site https://www.rust-lang.org --output ./reports
-cargo run -- --site https://www.rust-lang.org              # report to stdout
+cargo run -- https://www.rust-lang.org --output ./reports
+cargo run -- https://www.rust-lang.org              # report to stdout
 ```
 
 In PowerShell, set the env var separately: `$env:RUSTC_BOOTSTRAP = "1"; cargo build --release --config .cargo/release.toml`.
@@ -48,7 +48,7 @@ Both keys under `[unstable]` require a nightly compiler. `RUSTC_BOOTSTRAP=1` unl
 
 ### Data Flow
 
-1. `Target::parse()` turns the `--site` argument into a host and port
+1. `Target::parse()` turns the positional site argument into a host and port
 2. `fs::create_dir_all()` ensures the output directory exists, when `--output` was given
 3. `tls::fetch_chain()` resolves the host, connects, completes the TLS handshake with an accept-anything certificate verifier, and copies out the peer certificates plus the negotiated protocol and cipher suite
 4. `report::render()` parses each DER certificate and formats the whole report as a `String`
@@ -77,7 +77,7 @@ Both keys under `[unstable]` require a nightly compiler. `RUSTC_BOOTSTRAP=1` unl
 
 **`src/run.rs`** — Wires the above together and emits the report. Returns `Some(path)` when it wrote a file, `None` when it printed to stdout.
 
-**`src/main.rs`** — CLI (clap derive), maps `anyhow::Result` to an exit code via `eprintln!("{e:#}")` + `process::exit(1)`. `Ok(None)` prints nothing, so in stdout mode the report is the entire stdout payload.
+**`src/main.rs`** — CLI (clap derive). The site is a required positional argument and `--output` is the only flag. Maps `anyhow::Result` to an exit code via `eprintln!("{e:#}")` + `process::exit(1)`. `Ok(None)` prints nothing, so in stdout mode the report is the entire stdout payload.
 
 ### Key Dependencies
 

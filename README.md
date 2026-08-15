@@ -24,7 +24,7 @@ resulting `certinfo.exe` is self contained.
 
 | Argument          | Description                                                                                            |
 |:------------------|:-------------------------------------------------------------------------------------------------------|
-| `--site <SITE>`   | Target site. `-s` for short.                                                                             |
+| `<SITE>`          | Target site. Positional and required.                                                                    |
 | `--output <DIR>`  | Directory the report is written to. `-o` for short. Optional; the report goes to stdout when it is omitted. |
 
 The site argument accepts three forms. The port defaults to 443 when it is omitted.
@@ -40,15 +40,15 @@ rejected. The output directory is created if it does not exist. When `--output` 
 is written to stdout instead and no file is created.
 
 ``` powershell
-.\certinfo.exe --site https://www.rust-lang.org --output .\reports
+.\certinfo.exe https://www.rust-lang.org --output .\reports
 ```
 
 ``` powershell
-.\certinfo.exe -s expired.badssl.com -o .\reports
+.\certinfo.exe expired.badssl.com -o .\reports
 ```
 
 ``` powershell
-.\certinfo.exe -s www.rust-lang.org
+.\certinfo.exe www.rust-lang.org
 ```
 
 With `--output`, the path of the report is printed to stdout on success and the exit code is 0.

@@ -9,7 +9,7 @@ use clap::Parser;
 struct Cli {
     /// Target site. Accepts `example.com`, `example.com:8443` or
     /// `https://example.com/path`. The port defaults to 443.
-    #[clap(long, short)]
+    #[clap(value_name = "SITE")]
     site: String,
 
     /// Directory the report is written to. Created if it does not exist.
